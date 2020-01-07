@@ -432,6 +432,7 @@ static ngx_buf_t *
 ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_t  extract_crc32)
 {
     size_t                          len, entry_len, name_len, uri_len, crc32_len;
+    size_t                          uri_escape, name_escape;
     ngx_buf_t                      *b;
     ngx_uint_t                      i, utf8;
     ngx_http_index4zip_entry_t     *entry;
@@ -444,7 +445,8 @@ ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_
     }
 
     crc32_len = extract_crc32 ? 8 : 1;
-
+    uri_escape = ngx_escape_uri(NULL, r->uri.data, r->uri.len, NGX_ESCAPE_URI);
+    
     len = 0;
     entry = entries->elts;
     for (i = 0; i < entries->nelts; i++) {
@@ -455,8 +457,9 @@ ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_
             name_len = entry[i].name.len;
             uri_len = r->uri.len;
         }
+        name_escape = ngx_escape_uri(NULL, entry[i].name.data, entry[i].name.len, NGX_ESCAPE_URI);
 
-        entry_len = 2 * name_len + uri_len
+        entry_len = 2 * name_len + uri_len + (uri_escape + name_escape) * 2 
                   + crc32_len /* crc size */
                   + 20 /* the file size */
                   + 4;  /* 3 spaces + '\n' */
@@ -473,6 +476,7 @@ ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_
     }
 
     for (i = 0; i < entries->nelts; i++) {
+        /*
         if (extract_crc32) {
             b->last = ngx_sprintf(b->last, "%08xd %l %V%V %V\n",
                 entry[i].crc32, entry[i].size, &r->uri, &entry[i].name, &entry[i].name);
@@ -480,6 +484,24 @@ ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_
             b->last = ngx_sprintf(b->last, "- %l %V%V %V\n", 
                 entry[i].size, &r->uri, &entry[i].name, &entry[i].name);
         }
+        */
+        //output: crc32 & size
+        if (extract_crc32) {
+            b->last = ngx_sprintf(b->last, "%08xd %l ", entry[i].crc32, entry[i].size);
+        } else {
+            b->last = ngx_sprintf(b->last, "- %l ", entry[i].size);
+        }
+        //output: location
+        //name_escape = utf8 ? 0: ngx_escape_uri(NULL, entry[i].name.data, entry[i].name.len, NGX_ESCAPE_URI_COMPONENT);
+        name_escape = ngx_escape_uri(NULL, entry[i].name.data, entry[i].name.len, NGX_ESCAPE_URI);
+        if( name_escape || uri_escape ){
+            b->last = (u_char *)ngx_escape_uri(b->last, r->uri.data, r->uri.len, NGX_ESCAPE_URI);
+            b->last = (u_char *)ngx_escape_uri(b->last, entry[i].name.data, entry[i].name.len, NGX_ESCAPE_URI);
+        } else {
+            b->last = ngx_sprintf(b->last, "%V%V", &r->uri, &entry[i].name);
+        }
+        //output: entry name
+        b->last = ngx_sprintf(b->last, " %V\n", &entry[i].name);        
     }
 
     return b;
