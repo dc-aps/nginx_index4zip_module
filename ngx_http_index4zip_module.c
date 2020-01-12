@@ -434,15 +434,8 @@ ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_
     size_t                          len, entry_len, name_len, uri_len, crc32_len;
     size_t                          uri_escape, name_escape;
     ngx_buf_t                      *b;
-    ngx_uint_t                      i, utf8;
+    ngx_uint_t                      i;
     ngx_http_index4zip_entry_t     *entry;
-
-    if (r->headers_out.charset.len == 5
-        && ngx_strncasecmp(r->headers_out.charset.data, (u_char *) "utf-8", 5)== 0) {
-        utf8 = 1;
-    } else {
-        utf8 = 0;
-    }
 
     crc32_len = extract_crc32 ? 8 : 1;
     uri_escape = ngx_escape_uri(NULL, r->uri.data, r->uri.len, NGX_ESCAPE_URI);
@@ -450,15 +443,9 @@ ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_
     len = 0;
     entry = entries->elts;
     for (i = 0; i < entries->nelts; i++) {
-        if (utf8) {
-            name_len = ngx_utf8_length(entry[i].name.data, entry[i].name.len);
-            uri_len = ngx_utf8_length(r->uri.data, r->uri.len);
-        } else {
-            name_len = entry[i].name.len;
-            uri_len = r->uri.len;
-        }
+        name_len = entry[i].name.len;
+        uri_len = r->uri.len;
         name_escape = ngx_escape_uri(NULL, entry[i].name.data, entry[i].name.len, NGX_ESCAPE_URI);
-
         entry_len = 2 * name_len + uri_len + (uri_escape + name_escape) * 2 
                   + crc32_len /* crc size */
                   + 20 /* the file size */
@@ -492,7 +479,6 @@ ngx_http_index4zip_output(ngx_http_request_t *r, ngx_array_t *entries, ngx_flag_
             b->last = ngx_sprintf(b->last, "- %l ", entry[i].size);
         }
         //output: location
-        //name_escape = utf8 ? 0: ngx_escape_uri(NULL, entry[i].name.data, entry[i].name.len, NGX_ESCAPE_URI_COMPONENT);
         name_escape = ngx_escape_uri(NULL, entry[i].name.data, entry[i].name.len, NGX_ESCAPE_URI);
         if( name_escape || uri_escape ){
             b->last = (u_char *)ngx_escape_uri(b->last, r->uri.data, r->uri.len, NGX_ESCAPE_URI);
